@@ -1,0 +1,77 @@
+package tesis.tesisventas.controllers;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import tesis.tesisventas.dtos.FacturaRequest;
+import tesis.tesisventas.models.Factura;
+import tesis.tesisventas.services.FacturaService;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/facturas")
+public class FacturaController {
+
+    @Autowired
+    private FacturaService facturaService;
+
+    @GetMapping
+    public ResponseEntity<List<Factura>> findAll() {
+        return ResponseEntity.ok(facturaService.getAll());
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<Factura> findById(@PathVariable UUID id) {
+        Factura factura = facturaService.getById(id);
+        if (factura != null) {
+            return ResponseEntity.ok(factura);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping
+    public ResponseEntity<Factura> create(@RequestBody FacturaRequest request) {
+        try {
+            Factura createdFactura = facturaService.create(request);
+            return ResponseEntity.status(HttpStatus.CREATED).body(createdFactura);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Factura> update(@PathVariable UUID id, @RequestBody FacturaRequest request) {
+        try {
+            Factura updatedFactura = facturaService.update(id, request);
+            if (updatedFactura != null) {
+                return ResponseEntity.ok(updatedFactura);
+            } else {
+                return ResponseEntity.notFound().build();
+            }
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        facturaService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // Endpoints adicionales útiles
+
+    @GetMapping("/user/{userId}")
+    public ResponseEntity<List<Factura>> findByUserId(@PathVariable UUID userId) {
+        return ResponseEntity.ok(facturaService.getByUserId(userId));
+    }
+
+    @GetMapping("/forma-pago/{idFormaPago}")
+    public ResponseEntity<List<Factura>> findByFormaPago(@PathVariable UUID idFormaPago) {
+        return ResponseEntity.ok(facturaService.getByFormaPago(idFormaPago));
+    }
+}
