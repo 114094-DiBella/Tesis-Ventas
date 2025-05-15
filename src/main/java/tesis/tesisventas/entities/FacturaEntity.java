@@ -46,4 +46,17 @@ public class FacturaEntity {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @PrePersist
+    @PreUpdate
+    public void calcularTotal() {
+        if (detalles != null && !detalles.isEmpty()) {
+            this.total = detalles.stream()
+                    .map(DetalleFacturaEntity::getSubtotal)
+                    .filter(subtotal -> subtotal != null)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        } else {
+            this.total = BigDecimal.ZERO;
+        }
+    }
+
 }

@@ -2,10 +2,13 @@ package tesis.tesisventas.services.impl;
 
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tesis.tesisventas.client.impl.ProductClientServiceImpl;
 import tesis.tesisventas.dtos.DetalleRequest;
 import tesis.tesisventas.dtos.FacturaRequest;
+import tesis.tesisventas.dtos.ProductResponse;
 import tesis.tesisventas.entities.DetalleFacturaEntity;
 import tesis.tesisventas.entities.FacturaEntity;
 import tesis.tesisventas.models.DetalleFactura;
@@ -14,6 +17,7 @@ import tesis.tesisventas.repositories.DetalleJpaRepository;
 import tesis.tesisventas.repositories.FacturaJpaRepository;
 import tesis.tesisventas.services.FacturaService;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +36,10 @@ public class FacturaServiceImpl implements FacturaService {
 
     @Autowired
     private DetalleJpaRepository detalleJpaRepository;
+
+
+    @Autowired
+    private ProductClientServiceImpl productClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -56,44 +64,42 @@ public class FacturaServiceImpl implements FacturaService {
             throw new IllegalArgumentException("Request cannot be null");
         }
 
-        // Crear la entidad factura sin asignar ID (será generado por JPA)
         FacturaEntity facturaEntity = new FacturaEntity();
         facturaEntity.setUserId(request.getUserId());
-
         facturaEntity.setIdFormaPago(request.getIdFormaPago());
         facturaEntity.setCreatedAt(LocalDateTime.now());
-
-        // Inicializar la lista de detalles
         facturaEntity.setDetalles(new ArrayList<>());
 
-        // Guardar la factura para obtener su ID generado
         FacturaEntity savedFactura = facturaJpaRepository.save(facturaEntity);
 
-        // Procesar los detalles si existen
         if (request.getDetalles() != null && !request.getDetalles().isEmpty()) {
             for (DetalleRequest detalleRequest : request.getDetalles()) {
-                // Crear la entidad detalle
+                ProductResponse producto = productClient.getProductById(detalleRequest.getIdProducto());
+
+                if (producto == null) {
+                    throw new IllegalArgumentException("Producto no encontrado: " + detalleRequest.getIdProducto());
+                }
+
+                if (producto.getStock().compareTo(detalleRequest.getCantidad()) < 0) {
+                    throw new IllegalArgumentException("Stock insuficiente para el producto: " + producto.getName());
+                }
+
                 DetalleFacturaEntity detalle = new DetalleFacturaEntity();
-                // No asignamos ID (será generado por JPA)
                 detalle.setIdFactura(savedFactura.getId());
                 detalle.setIdProducto(detalleRequest.getIdProducto());
                 detalle.setCantidad(detalleRequest.getCantidad());
-
-
-                // Establecer la relación con la factura
+                detalle.setPrecioUnitario(producto.getPrice());
+                detalle.setSubtotal(producto.getPrice().multiply(new BigDecimal(detalleRequest.getCantidad())));
                 detalle.setFactura(savedFactura);
 
-                // Guardar el detalle
                 DetalleFacturaEntity savedDetalle = detalleJpaRepository.save(detalle);
-
-                // Añadir el detalle guardado a la lista de detalles de la factura
                 savedFactura.getDetalles().add(savedDetalle);
             }
+            facturaEntity.calcularTotal();
+            facturaJpaRepository.save(facturaEntity);
         }
 
-        // Mapear a modelo de dominio y retornar
-            Factura factura =  modelMapper.map(savedFactura, Factura.class);
-        return factura;
+        return modelMapper.map(savedFactura, Factura.class);
     }
 
     @Override
@@ -103,37 +109,41 @@ public class FacturaServiceImpl implements FacturaService {
             throw new IllegalArgumentException("Request cannot be null");
         }
 
-        // Buscar la factura a actualizar
         Optional<FacturaEntity> optionalFactura = facturaJpaRepository.findById(id);
         if (optionalFactura.isEmpty()) {
-            return null; // O lanzar excepción
+            return null;
         }
 
         FacturaEntity facturaEntity = optionalFactura.get();
-
         facturaEntity.setUserId(request.getUserId());
-
         facturaEntity.setIdFormaPago(request.getIdFormaPago());
-
         facturaEntity.getDetalles().clear();
 
-
-        // Agregar los nuevos detalles
         if (request.getDetalles() != null && !request.getDetalles().isEmpty()) {
             for (DetalleRequest detalleRequest : request.getDetalles()) {
+                ProductResponse producto = productClient.getProductById(detalleRequest.getIdProducto());
+
+                if (producto == null) {
+                    throw new IllegalArgumentException("Producto no encontrado: " + detalleRequest.getIdProducto());
+                }
+
+                if (producto.getStock().compareTo(detalleRequest.getCantidad()) < 0) {
+                    throw new IllegalArgumentException("Stock insuficiente para el producto: " + producto.getName());
+                }
+
                 DetalleFacturaEntity detalle = new DetalleFacturaEntity();
                 detalle.setIdFactura(id);
                 detalle.setIdProducto(detalleRequest.getIdProducto());
                 detalle.setCantidad(detalleRequest.getCantidad());
-
+                detalle.setPrecioUnitario(producto.getPrice());
+                detalle.setSubtotal(producto.getPrice().multiply(new BigDecimal(detalleRequest.getCantidad())));
                 detalle.setFactura(facturaEntity);
 
-                // Si usas cascada, solo añadirlo a la lista es suficiente
                 facturaEntity.getDetalles().add(detalle);
             }
         }
 
-        // Guardar la factura actualizada con sus detalles
+        facturaEntity.calcularTotal();
         FacturaEntity updatedFactura = facturaJpaRepository.save(facturaEntity);
 
         return modelMapper.map(updatedFactura, Factura.class);
@@ -149,7 +159,6 @@ public class FacturaServiceImpl implements FacturaService {
         }
         return;
     }
-
 
     @Transactional(readOnly = true)
     @Override

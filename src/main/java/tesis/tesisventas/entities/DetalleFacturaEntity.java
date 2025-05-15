@@ -40,4 +40,12 @@ public class DetalleFacturaEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "id_factura", insertable = false, updatable = false)
     private FacturaEntity factura;
+
+    @PrePersist
+    @PreUpdate
+    public void calcularSubtotal() {
+        if (cantidad != null && precioUnitario != null) {
+            this.subtotal = precioUnitario.multiply(new BigDecimal(cantidad));
+        }
+    }
 }
