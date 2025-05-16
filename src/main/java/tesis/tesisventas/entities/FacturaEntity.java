@@ -40,8 +40,8 @@ public class FacturaEntity {
     @JoinColumn(name = "id_forma_pago", insertable = false, updatable = false)
     private FormaPagoEntity formaPago;
 
-    @Column(name = "is_active")
-    private boolean isActive;
+    @Column(name = "status")
+    private String status;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

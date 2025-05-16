@@ -5,12 +5,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import tesis.tesisventas.dtos.ProductResponse;
 
+import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,6 +56,50 @@ public class ProductClientServiceImpl{
         }
     }
 
+
+    public boolean updateProductStock(UUID productId, BigInteger quantityToReduce) {
+        try {
+            ProductResponse producto = getProductById(productId);
+            if (producto == null) {
+                logger.error("No se encontró el producto para actualizar stock: {}", productId);
+                return false;
+            }
+
+            BigInteger nuevoStock = producto.getStock().subtract(quantityToReduce);
+            if (nuevoStock.compareTo(BigInteger.ZERO) < 0) {
+                nuevoStock = BigInteger.ZERO;
+            }
+
+            String url = this.productServiceUrl + "/" + productId;
+
+            Map<String, Object> updateRequest = new HashMap<>();
+            updateRequest.put("name", producto.getName());
+            updateRequest.put("marcaId", producto.getMarca().getId());
+            updateRequest.put("size", producto.getSize());
+            updateRequest.put("color", producto.getColor());
+            updateRequest.put("categoryId", producto.getCategory().getId());
+            updateRequest.put("stock", nuevoStock);
+            updateRequest.put("price", producto.getPrice());
+            updateRequest.put("active", producto.getActive());
+            updateRequest.put("imageIds", new ArrayList<>());
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(updateRequest, headers);
+            ResponseEntity<String> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.PUT,
+                    entity,
+                    String.class
+            );
+
+            return response.getStatusCode().is2xxSuccessful();
+        } catch (Exception e) {
+            logger.error("Error al actualizar el stock del producto {}: {}", productId, e.getMessage());
+            return false;
+        }
+    }
 
     public boolean hasEnoughStock(UUID productId, int quantity) {
         ProductResponse product = getProductById(productId);

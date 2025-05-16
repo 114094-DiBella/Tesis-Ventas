@@ -2,7 +2,6 @@ package tesis.tesisventas.services.impl;
 
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tesis.tesisventas.client.impl.ProductClientServiceImpl;
@@ -13,10 +12,12 @@ import tesis.tesisventas.entities.DetalleFacturaEntity;
 import tesis.tesisventas.entities.FacturaEntity;
 import tesis.tesisventas.models.DetalleFactura;
 import tesis.tesisventas.models.Factura;
+import tesis.tesisventas.models.Status;
 import tesis.tesisventas.repositories.DetalleJpaRepository;
 import tesis.tesisventas.repositories.FacturaJpaRepository;
 import tesis.tesisventas.services.FacturaService;
-
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -37,7 +38,9 @@ public class FacturaServiceImpl implements FacturaService {
     @Autowired
     private DetalleJpaRepository detalleJpaRepository;
 
+    private static final Logger logger = LoggerFactory.getLogger(FacturaServiceImpl.class);
 
+    private static final BigDecimal descuentoEfec = BigDecimal.valueOf(0.15);
     @Autowired
     private ProductClientServiceImpl productClient;
 
@@ -69,7 +72,7 @@ public class FacturaServiceImpl implements FacturaService {
         facturaEntity.setIdFormaPago(request.getIdFormaPago());
         facturaEntity.setCreatedAt(LocalDateTime.now());
         facturaEntity.setDetalles(new ArrayList<>());
-
+        facturaEntity.setStatus(String.valueOf(Status.PENDIENTE));
         FacturaEntity savedFactura = facturaJpaRepository.save(facturaEntity);
 
         if (request.getDetalles() != null && !request.getDetalles().isEmpty()) {
@@ -92,14 +95,23 @@ public class FacturaServiceImpl implements FacturaService {
                 detalle.setSubtotal(producto.getPrice().multiply(new BigDecimal(detalleRequest.getCantidad())));
                 detalle.setFactura(savedFactura);
 
+
                 DetalleFacturaEntity savedDetalle = detalleJpaRepository.save(detalle);
                 savedFactura.getDetalles().add(savedDetalle);
             }
             facturaEntity.calcularTotal();
             facturaJpaRepository.save(facturaEntity);
-        }
+            //if(!facturaEntity.getFormaPago().getName().equals("Efectivo")){
+                //TODO: Llamar al web client de medio de pago para que procese el pago
+                //TODO: Actualizar el estado de la factura a PAGADA o RECHAZADA segun corresponda
+            //}
 
-        return modelMapper.map(savedFactura, Factura.class);
+            BigDecimal descuento = facturaEntity.getTotal().multiply(descuentoEfec);
+
+            facturaEntity.setTotal(facturaEntity.getTotal().subtract(descuento));
+            actualizarProducto(request);
+        }
+      return modelMapper.map(savedFactura, Factura.class);
     }
 
     @Override
@@ -111,6 +123,7 @@ public class FacturaServiceImpl implements FacturaService {
 
         Optional<FacturaEntity> optionalFactura = facturaJpaRepository.findById(id);
         if (optionalFactura.isEmpty()) {
+            logger.error("Factura no encontrada: " + id);
             return null;
         }
 
@@ -145,6 +158,7 @@ public class FacturaServiceImpl implements FacturaService {
 
         facturaEntity.calcularTotal();
         FacturaEntity updatedFactura = facturaJpaRepository.save(facturaEntity);
+        actualizarProducto(request); //Metodo privado
 
         return modelMapper.map(updatedFactura, Factura.class);
     }
@@ -154,10 +168,10 @@ public class FacturaServiceImpl implements FacturaService {
     public void delete(UUID id) {
         Optional<FacturaEntity> optionalFactura = facturaJpaRepository.findById(id);
         if (optionalFactura.isPresent()) {
-            optionalFactura.get().setActive(false);
-            return;
+            optionalFactura.get().setStatus(String.valueOf(Status.RECHAZADA));
+            facturaJpaRepository.save(optionalFactura.get());
+            logger.info("Factura " + id + " eliminada");
         }
-        return;
     }
 
     @Transactional(readOnly = true)
@@ -194,5 +208,18 @@ public class FacturaServiceImpl implements FacturaService {
         return detalles.stream()
                 .map(entity -> modelMapper.map(entity, DetalleFactura.class))
                 .collect(Collectors.toList());
+    }
+
+
+    private void actualizarProducto(FacturaRequest request) {
+        for (DetalleRequest detalleRequest : request.getDetalles()) {
+            boolean stockUpdated = productClient.updateProductStock(
+                    detalleRequest.getIdProducto(),
+                    detalleRequest.getCantidad()
+            );
+            if (!stockUpdated) {
+                logger.warn("No se pudo actualizar el stock del producto: {}", detalleRequest.getIdProducto());
+            }
+        }
     }
 }
