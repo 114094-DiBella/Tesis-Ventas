@@ -1,5 +1,6 @@
 package tesis.tesisventas.models;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -18,5 +19,9 @@ public class Factura {
     private List<DetalleFactura> detalles;
     private BigDecimal total;
     private UUID idFormaPago;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;
+
+    private Status status;
 }

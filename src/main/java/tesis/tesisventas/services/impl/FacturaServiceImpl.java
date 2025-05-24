@@ -5,9 +5,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tesis.tesisventas.client.impl.ProductClientServiceImpl;
+import tesis.tesisventas.client.impl.UserClientServiceImpl;
 import tesis.tesisventas.dtos.DetalleRequest;
 import tesis.tesisventas.dtos.FacturaRequest;
 import tesis.tesisventas.dtos.ProductResponse;
+import tesis.tesisventas.dtos.UserResponse;
 import tesis.tesisventas.entities.DetalleFacturaEntity;
 import tesis.tesisventas.entities.FacturaEntity;
 import tesis.tesisventas.models.DetalleFactura;
@@ -43,6 +45,9 @@ public class FacturaServiceImpl implements FacturaService {
     private static final BigDecimal descuentoEfec = BigDecimal.valueOf(0.15);
     @Autowired
     private ProductClientServiceImpl productClient;
+
+    @Autowired
+    private UserClientServiceImpl userClient;
 
     @Override
     @Transactional(readOnly = true)
@@ -222,4 +227,5 @@ public class FacturaServiceImpl implements FacturaService {
             }
         }
     }
+
 }
