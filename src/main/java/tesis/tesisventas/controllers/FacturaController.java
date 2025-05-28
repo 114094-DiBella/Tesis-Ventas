@@ -5,6 +5,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import tesis.tesisventas.dtos.FacturaRequest;
+import tesis.tesisventas.dtos.OrderResponse;
 import tesis.tesisventas.models.Factura;
 import tesis.tesisventas.services.FacturaService;
 
@@ -74,4 +75,10 @@ public class FacturaController {
     public ResponseEntity<List<Factura>> findByFormaPago(@PathVariable UUID idFormaPago) {
         return ResponseEntity.ok(facturaService.getByFormaPago(idFormaPago));
     }
+
+    @GetMapping("orders")
+    public ResponseEntity<List<OrderResponse>> findAllOrders() {
+        return ResponseEntity.ok(facturaService.getAllOrders());
+    }
+
 }

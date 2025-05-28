@@ -3,6 +3,7 @@ package tesis.tesisventas.services;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tesis.tesisventas.dtos.FacturaRequest;
+import tesis.tesisventas.dtos.OrderResponse;
 import tesis.tesisventas.models.DetalleFactura;
 import tesis.tesisventas.models.Factura;
 
@@ -13,6 +14,7 @@ import java.util.UUID;
 public interface FacturaService {
 
     List<Factura> getAll();
+    List<OrderResponse> getAllOrders();
     Factura getById(UUID id);
     Factura create(FacturaRequest request);
     Factura update(UUID id, FacturaRequest request);

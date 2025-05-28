@@ -4,12 +4,11 @@ import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tesis.tesisventas.client.impl.PaymentClientService;
 import tesis.tesisventas.client.impl.ProductClientServiceImpl;
 import tesis.tesisventas.client.impl.UserClientServiceImpl;
-import tesis.tesisventas.dtos.DetalleRequest;
-import tesis.tesisventas.dtos.FacturaRequest;
-import tesis.tesisventas.dtos.ProductResponse;
-import tesis.tesisventas.dtos.UserResponse;
+import tesis.tesisventas.components.OrderCodeGenerator;
+import tesis.tesisventas.dtos.*;
 import tesis.tesisventas.entities.DetalleFacturaEntity;
 import tesis.tesisventas.entities.FacturaEntity;
 import tesis.tesisventas.models.DetalleFactura;
@@ -40,6 +39,9 @@ public class FacturaServiceImpl implements FacturaService {
     @Autowired
     private DetalleJpaRepository detalleJpaRepository;
 
+    @Autowired
+    private OrderCodeGenerator orderCodeGenerator;
+
     private static final Logger logger = LoggerFactory.getLogger(FacturaServiceImpl.class);
 
     private static final BigDecimal descuentoEfec = BigDecimal.valueOf(0.15);
@@ -48,6 +50,10 @@ public class FacturaServiceImpl implements FacturaService {
 
     @Autowired
     private UserClientServiceImpl userClient;
+
+    @Autowired
+    private PaymentClientService paymentClientService;
+
 
     @Override
     @Transactional(readOnly = true)
@@ -78,6 +84,10 @@ public class FacturaServiceImpl implements FacturaService {
         facturaEntity.setCreatedAt(LocalDateTime.now());
         facturaEntity.setDetalles(new ArrayList<>());
         facturaEntity.setStatus(String.valueOf(Status.PENDIENTE));
+
+        String orderCode = orderCodeGenerator.generateSimpleCode();
+        facturaEntity.setCodFactura(orderCode);
+
         FacturaEntity savedFactura = facturaJpaRepository.save(facturaEntity);
 
         if (request.getDetalles() != null && !request.getDetalles().isEmpty()) {
@@ -115,6 +125,15 @@ public class FacturaServiceImpl implements FacturaService {
 
             facturaEntity.setTotal(facturaEntity.getTotal().subtract(descuento));
             actualizarProducto(request);
+        }
+        if (!Status.RECHAZADA.equals(facturaEntity.getStatus())) {
+
+            PaymentRequest paymentReq = new PaymentRequest();
+            paymentReq.setOrderCode(savedFactura.getId().toString());
+            paymentReq.setAmount(savedFactura.getTotal());
+            paymentReq.setDescription("Pago de factura " + savedFactura.getId());
+
+            String paymentUrl = paymentClientService.createPaymentPreference(paymentReq);
         }
       return modelMapper.map(savedFactura, Factura.class);
     }
@@ -228,4 +247,40 @@ public class FacturaServiceImpl implements FacturaService {
         }
     }
 
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getAllOrders() {
+        List<FacturaEntity> facturaList = facturaJpaRepository.findAll();
+        List<OrderResponse> orderResponses = new ArrayList<>();
+
+        for (FacturaEntity facturaEntity : facturaList) {
+            OrderResponse orderResponse = new OrderResponse();
+            orderResponse.setDetails(new ArrayList<>());
+
+            orderResponse.setCodOrder(facturaEntity.getCodFactura());
+            orderResponse.setUser(userClient.getUserById(facturaEntity.getUserId()));
+
+            // Process each detail
+            for (DetalleFacturaEntity detalleFacturaEntity : facturaEntity.getDetalles()) {
+                // Create NEW instance for each detail
+                OrderDetailResponse orderDetailResponse = new OrderDetailResponse();
+                orderDetailResponse.setProduct(productClient.getProductById(detalleFacturaEntity.getIdProducto()));
+                orderDetailResponse.setQuantity(detalleFacturaEntity.getCantidad());
+                orderDetailResponse.setPriceUnit(detalleFacturaEntity.getPrecioUnitario());
+                orderDetailResponse.setSubTotal(detalleFacturaEntity.getSubtotal());
+
+                orderResponse.getDetails().add(orderDetailResponse);
+            }
+
+            orderResponse.setIdFormaPago(facturaEntity.getIdFormaPago());
+            orderResponse.setStatus(Status.valueOf(facturaEntity.getStatus()));
+            orderResponse.setTotal(facturaEntity.getTotal());
+            orderResponse.setCreatedAt(facturaEntity.getCreatedAt());
+
+            orderResponses.add(orderResponse);
+        }
+
+        return orderResponses;
+    }
 }

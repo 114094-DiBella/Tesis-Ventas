@@ -24,6 +24,9 @@ public class FacturaEntity {
     @Column(name = "id")
     private UUID id;
 
+    @Column(name = "cod_factura", unique = true)
+    private String codFactura;
+
     @Column(name = "user_id")
     private UUID userId;
 
