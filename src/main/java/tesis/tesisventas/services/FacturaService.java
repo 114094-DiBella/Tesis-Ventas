@@ -6,6 +6,7 @@ import tesis.tesisventas.dtos.FacturaRequest;
 import tesis.tesisventas.dtos.OrderResponse;
 import tesis.tesisventas.models.DetalleFactura;
 import tesis.tesisventas.models.Factura;
+import tesis.tesisventas.models.Status;
 
 import java.util.List;
 import java.util.UUID;
@@ -31,4 +32,7 @@ public interface FacturaService {
 
     @Transactional(readOnly = true)
     List<DetalleFactura> getDetallesByFactura(UUID idFactura);
+
+    @Transactional
+    void updateStatus(UUID id, Status newStatus);
 }

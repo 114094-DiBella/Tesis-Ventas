@@ -7,9 +7,11 @@ import org.springframework.web.bind.annotation.*;
 import tesis.tesisventas.dtos.FacturaRequest;
 import tesis.tesisventas.dtos.OrderResponse;
 import tesis.tesisventas.models.Factura;
+import tesis.tesisventas.models.Status;
 import tesis.tesisventas.services.FacturaService;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @RestController
@@ -79,6 +81,20 @@ public class FacturaController {
     @GetMapping("orders")
     public ResponseEntity<List<OrderResponse>> findAllOrders() {
         return ResponseEntity.ok(facturaService.getAllOrders());
+    }
+
+    @PutMapping("/{id}/update-status")
+    public ResponseEntity<?> updatePaymentStatus(
+            @PathVariable UUID id,
+            @RequestBody Map<String, String> request) {
+
+        try {
+            String newStatus = request.get("status");
+            facturaService.updateStatus(id, Status.valueOf(newStatus));
+            return ResponseEntity.ok().build();
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
     }
 
 }

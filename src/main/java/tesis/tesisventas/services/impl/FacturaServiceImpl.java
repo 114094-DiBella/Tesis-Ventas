@@ -127,11 +127,14 @@ public class FacturaServiceImpl implements FacturaService {
             actualizarProducto(request);
         }
         if (!Status.RECHAZADA.equals(facturaEntity.getStatus())) {
-
+            //TODO: Mandar bien los datos, esta mandando cualquier cosa!
             PaymentRequest paymentReq = new PaymentRequest();
             paymentReq.setOrderCode(savedFactura.getId().toString());
             paymentReq.setAmount(savedFactura.getTotal());
             paymentReq.setDescription("Pago de factura " + savedFactura.getId());
+            paymentReq.setQuantity(1);
+            paymentReq.setPaymentMethodId(savedFactura.getCodFactura());
+            paymentReq.setProductName(savedFactura.getCodFactura());
 
             String paymentUrl = paymentClientService.createPaymentPreference(paymentReq);
         }
@@ -282,5 +285,18 @@ public class FacturaServiceImpl implements FacturaService {
         }
 
         return orderResponses;
+    }
+
+    @Transactional
+    @Override
+    public void updateStatus(UUID id, Status newStatus) {
+        Optional<FacturaEntity> optionalFactura = facturaJpaRepository.findById(id);
+        if (optionalFactura.isPresent()) {
+            FacturaEntity factura = optionalFactura.get();
+            factura.setStatus(newStatus.toString());
+            facturaJpaRepository.save(factura);
+
+            logger.info("Factura {} actualizada a estado: {}", id, newStatus);
+        }
     }
 }
