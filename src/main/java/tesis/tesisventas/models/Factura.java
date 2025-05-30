@@ -19,6 +19,7 @@ public class Factura {
     private List<DetalleFactura> detalles;
     private BigDecimal total;
     private UUID idFormaPago;
+    private String paymentUrl;
 
     @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
     private LocalDateTime createdAt;

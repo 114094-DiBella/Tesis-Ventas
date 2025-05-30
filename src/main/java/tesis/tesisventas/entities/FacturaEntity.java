@@ -49,6 +49,9 @@ public class FacturaEntity {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @Column(name = "payment_url")
+    private String paymentUrl;
+
     @PrePersist
     @PreUpdate
     public void calcularTotal() {

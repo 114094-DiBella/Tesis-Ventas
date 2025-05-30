@@ -110,35 +110,56 @@ public class FacturaServiceImpl implements FacturaService {
                 detalle.setSubtotal(producto.getPrice().multiply(new BigDecimal(detalleRequest.getCantidad())));
                 detalle.setFactura(savedFactura);
 
-
                 DetalleFacturaEntity savedDetalle = detalleJpaRepository.save(detalle);
                 savedFactura.getDetalles().add(savedDetalle);
             }
-            facturaEntity.calcularTotal();
-            facturaJpaRepository.save(facturaEntity);
-            //if(!facturaEntity.getFormaPago().getName().equals("Efectivo")){
-                //TODO: Llamar al web client de medio de pago para que procese el pago
-                //TODO: Actualizar el estado de la factura a PAGADA o RECHAZADA segun corresponda
+
+            savedFactura.calcularTotal();
+
+            // Solo aplicar descuento si es efectivo
+            //UUID efectivoId = UUID.fromString("1111111-1111-1111-1111-11111111111");
+            //if (savedFactura.getIdFormaPago().equals(efectivoId)) {
+             //   BigDecimal descuento = savedFactura.getTotal().multiply(descuentoEfec);
+             //   savedFactura.setTotal(savedFactura.getTotal().subtract(descuento));
             //}
 
-            BigDecimal descuento = facturaEntity.getTotal().multiply(descuentoEfec);
-
-            facturaEntity.setTotal(facturaEntity.getTotal().subtract(descuento));
+            savedFactura = facturaJpaRepository.save(savedFactura);
             actualizarProducto(request);
         }
-        if (!Status.RECHAZADA.equals(facturaEntity.getStatus())) {
-            //TODO: Mandar bien los datos, esta mandando cualquier cosa!
-            PaymentRequest paymentReq = new PaymentRequest();
-            paymentReq.setOrderCode(savedFactura.getId().toString());
-            paymentReq.setAmount(savedFactura.getTotal());
-            paymentReq.setDescription("Pago de factura " + savedFactura.getId());
-            paymentReq.setQuantity(1);
-            paymentReq.setPaymentMethodId(savedFactura.getCodFactura());
-            paymentReq.setProductName(savedFactura.getCodFactura());
 
-            String paymentUrl = paymentClientService.createPaymentPreference(paymentReq);
-        }
-      return modelMapper.map(savedFactura, Factura.class);
+        // Preparar respuesta
+        Factura facturaResponse = modelMapper.map(savedFactura, Factura.class);
+
+        // SOLO crear la preferencia de pago si NO es efectivo
+        //UUID efectivoId = UUID.fromString("5ef1b016-64ff-4f2f-973c-cffd9a39c30e");
+        //if (!savedFactura.getIdFormaPago().equals(efectivoId)) {
+            try {
+                PaymentRequest paymentReq = new PaymentRequest();
+                paymentReq.setOrderCode(savedFactura.getId().toString());
+                paymentReq.setAmount(savedFactura.getTotal());
+                paymentReq.setDescription("Pago de factura " + savedFactura.getCodFactura());
+                paymentReq.setQuantity(1);
+                paymentReq.setPaymentMethodId(savedFactura.getIdFormaPago().toString());
+                paymentReq.setProductName("Productos de la tienda");
+
+                String paymentUrl = paymentClientService.createPaymentPreference(paymentReq);
+                logger.info("URL de pago creada: {}", paymentUrl);
+
+                // AGREGAR LA URL A LA RESPUESTA
+                facturaResponse.setPaymentUrl(paymentUrl);
+
+            } catch (Exception e) {
+                logger.error("Error creando preferencia de pago: {}", e.getMessage());
+                // La factura se creó bien, solo falló el pago
+            }
+        //} else {
+            // Si es efectivo, marcar como pagado directamente
+         //   savedFactura.setStatus(String.valueOf(Status.PAGADA));
+         //   facturaJpaRepository.save(savedFactura);
+         //   facturaResponse.setStatus(Status.PAGADA);
+       // }
+
+        return facturaResponse;
     }
 
     @Override
