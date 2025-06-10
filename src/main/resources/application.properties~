@@ -4,7 +4,7 @@ spring.application.name=Tesis-Ventas
 app.name=@project.name@
 app.desc=@project.description@
 app.version=@project.version@
-app.url=http://localhost:8081
+app.url=http://localhost:8007
 server.port=8081
 app.dev-name=John Doe
 app.dev-email=dumy@dumy
@@ -25,7 +25,7 @@ spring.jpa.show-sql=true
 spring.jpa.properties.hibernate.format_sql=true
 #spring.jpa.properties.hibernate.default_schema=users_schema
 spring.jpa.defer-datasource-initialization=true
-spring.sql.init.mode=never
+spring.sql.init.mode=always
 spring.jpa.open-in-view=false
 
 # Logging
