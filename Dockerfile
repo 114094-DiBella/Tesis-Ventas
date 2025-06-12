@@ -33,4 +33,6 @@ RUN addgroup --system spring && adduser --system spring --ingroup spring
 USER spring:spring
 
 # Comando para ejecutar la aplicación
-CMD ["java", "-jar", "target/Tesis-Ventas-0.0.1-SNAPSHOT.jar"]
+CMD ["java", "-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005", "-jar", "target/Tesis-Ventas-0.0.1-SNAPSHOT.jar"]
+
+#CMD ["java", "-jar", "target/Tesis-Ventas-0.0.1-SNAPSHOT.jar"]
