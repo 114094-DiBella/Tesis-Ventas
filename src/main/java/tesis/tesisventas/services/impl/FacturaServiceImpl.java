@@ -4,6 +4,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tesis.tesisventas.client.impl.NotifyClientService;
 import tesis.tesisventas.client.impl.PaymentClientService;
 import tesis.tesisventas.client.impl.ProductClientServiceImpl;
 import tesis.tesisventas.client.impl.UserClientServiceImpl;
@@ -53,6 +54,9 @@ public class FacturaServiceImpl implements FacturaService {
 
     @Autowired
     private PaymentClientService paymentClientService;
+
+    @Autowired
+    private NotifyClientService notifyClientService;
 
 
     @Override
@@ -116,23 +120,12 @@ public class FacturaServiceImpl implements FacturaService {
 
             savedFactura.calcularTotal();
 
-            // Solo aplicar descuento si es efectivo
-            //UUID efectivoId = UUID.fromString("1111111-1111-1111-1111-11111111111");
-            //if (savedFactura.getIdFormaPago().equals(efectivoId)) {
-             //   BigDecimal descuento = savedFactura.getTotal().multiply(descuentoEfec);
-             //   savedFactura.setTotal(savedFactura.getTotal().subtract(descuento));
-            //}
-
             savedFactura = facturaJpaRepository.save(savedFactura);
             actualizarProducto(request);
-        }
 
-        // Preparar respuesta
+        }
         Factura facturaResponse = modelMapper.map(savedFactura, Factura.class);
 
-        // SOLO crear la preferencia de pago si NO es efectivo
-        //UUID efectivoId = UUID.fromString("5ef1b016-64ff-4f2f-973c-cffd9a39c30e");
-        //if (!savedFactura.getIdFormaPago().equals(efectivoId)) {
             try {
                 PaymentRequest paymentReq = new PaymentRequest();
                 paymentReq.setOrderCode(savedFactura.getId().toString());
@@ -145,20 +138,16 @@ public class FacturaServiceImpl implements FacturaService {
                 String paymentUrl = paymentClientService.createPaymentPreference(paymentReq);
                 logger.info("URL de pago creada: {}", paymentUrl);
 
-                // AGREGAR LA URL A LA RESPUESTA
                 facturaResponse.setPaymentUrl(paymentUrl);
+
 
             } catch (Exception e) {
                 logger.error("Error creando preferencia de pago: {}", e.getMessage());
                 // La factura se creó bien, solo falló el pago
             }
-        //} else {
-            // Si es efectivo, marcar como pagado directamente
-         //   savedFactura.setStatus(String.valueOf(Status.PAGADA));
-         //   facturaJpaRepository.save(savedFactura);
-         //   facturaResponse.setStatus(Status.PAGADA);
-       // }
 
+          UserResponse user = userClient.getUserById(request.getUserId());
+          notifyClientService.sendPurchaseConfirmation(user.getEmail(), facturaEntity.getCodFactura(), facturaEntity.getTotal());
         return facturaResponse;
     }
 
@@ -316,7 +305,8 @@ public class FacturaServiceImpl implements FacturaService {
             FacturaEntity factura = optionalFactura.get();
             factura.setStatus(newStatus.toString());
             facturaJpaRepository.save(factura);
-
+            UserResponse userResponse = userClient.getUserById(factura.getUserId());
+            notifyClientService.sendPaymentApproved(userResponse.getEmail(), factura.getCodFactura());
             logger.info("Factura {} actualizada a estado: {}", id, newStatus);
         }
     }
