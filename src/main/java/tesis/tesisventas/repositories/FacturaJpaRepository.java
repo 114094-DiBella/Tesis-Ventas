@@ -19,4 +19,7 @@ public interface FacturaJpaRepository extends JpaRepository<FacturaEntity, UUID>
 
     @Query("SELECT f FROM FacturaEntity f LEFT JOIN FETCH f.detalles WHERE f.codFactura = :codFactura")
     Optional<FacturaEntity> findByCodFacturaWithDetails(@Param("codFactura") String codFactura);
+
+    @Query("SELECT f FROM FacturaEntity f WHERE f.status = :status")
+    List<FacturaEntity> findByStatus(@Param("status") String status);
 }

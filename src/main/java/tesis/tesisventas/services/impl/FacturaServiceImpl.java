@@ -21,6 +21,7 @@ import tesis.tesisventas.services.FacturaService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,6 +47,9 @@ public class FacturaServiceImpl implements FacturaService {
     private static final Logger logger = LoggerFactory.getLogger(FacturaServiceImpl.class);
 
     private static final BigDecimal descuentoEfec = BigDecimal.valueOf(0.15);
+
+    private static final int EXPIRATION_MINUTES = 5;
+
     @Autowired
     private ProductClientServiceImpl productClient;
 
@@ -309,5 +313,146 @@ public class FacturaServiceImpl implements FacturaService {
             notifyClientService.sendPaymentApproved(userResponse.getEmail(), factura.getCodFactura());
             logger.info("Factura {} actualizada a estado: {}", id, newStatus);
         }
+    }
+
+    @Transactional
+    public void procesarFacturasVencidas() {
+        logger.info("Iniciando verificación de facturas vencidas");
+
+        try {
+            // Buscar todas las facturas (usamos el método que ya existe)
+            List<FacturaEntity> todasLasFacturas = facturaJpaRepository.findAll();
+
+            LocalDateTime ahora = LocalDateTime.now();
+            int facturasRechazadas = 0;
+
+            for (FacturaEntity factura : todasLasFacturas) {
+                // Solo procesar facturas PENDIENTES
+                if (Status.PENDIENTE.toString().equals(factura.getStatus())) {
+
+                    // Verificar si han pasado más de 5 minutos
+                    LocalDateTime tiempoExpiracion = factura.getCreatedAt().plusMinutes(EXPIRATION_MINUTES);
+
+                    if (ahora.isAfter(tiempoExpiracion)) {
+                        // 1. Cambiar estado a RECHAZADA
+                        factura.setStatus(String.valueOf(Status.RECHAZADA));
+                        facturaJpaRepository.save(factura);
+
+                        // 2. Restaurar stock
+                        restaurarStockFactura(factura);
+
+                        // 3. Notificar al cliente
+                        notificarCancelacionAutomatica(factura);
+
+                        facturasRechazadas++;
+
+                        logger.info("Factura {} rechazada automáticamente por expiración. Creada: {}",
+                                factura.getCodFactura(), factura.getCreatedAt());
+                    }
+                }
+            }
+
+            if (facturasRechazadas > 0) {
+                logger.info("Total de facturas rechazadas automáticamente: {}", facturasRechazadas);
+            } else {
+                logger.debug("No se encontraron facturas vencidas");
+            }
+
+        } catch (Exception e) {
+            logger.error("Error procesando facturas vencidas: {}", e.getMessage(), e);
+        }
+    }
+
+    // Método para restaurar el stock usando la función existente
+    private void restaurarStockFactura(FacturaEntity factura) {
+        try {
+            for (DetalleFacturaEntity detalle : factura.getDetalles()) {
+                // Obtener el producto actual para verificar su stock
+                ProductResponse producto = productClient.getProductById(detalle.getIdProducto());
+
+                if (producto != null) {
+                    // Sumar la cantidad de vuelta al stock (usar BigInteger para suma)
+                    BigInteger stockActual = producto.getStock();
+                    BigInteger cantidadARestaurar = detalle.getCantidad();
+                    BigInteger nuevoStock = stockActual.add(cantidadARestaurar);
+
+                    // Crear request para actualizar con el nuevo stock
+                    boolean stockRestaurado = actualizarStockDirecto(detalle.getIdProducto(), nuevoStock, producto);
+
+                    if (stockRestaurado) {
+                        logger.info("Stock restaurado para producto {}: {} unidades",
+                                detalle.getIdProducto(), detalle.getCantidad());
+                    } else {
+                        logger.warn("No se pudo restaurar el stock del producto: {}", detalle.getIdProducto());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            logger.error("Error restaurando stock para factura {}: {}", factura.getCodFactura(), e.getMessage());
+        }
+    }
+
+    // Método auxiliar para actualizar stock directamente
+    private boolean actualizarStockDirecto(UUID productId, java.math.BigInteger nuevoStock, ProductResponse producto) {
+        try {
+            String url = productClient.getClass().getDeclaredField("productServiceUrl").get(productClient) + "/" + productId;
+
+            java.util.Map<String, Object> updateRequest = new java.util.HashMap<>();
+            updateRequest.put("name", producto.getName());
+            updateRequest.put("marcaId", producto.getMarca().getId());
+            updateRequest.put("size", producto.getSize());
+            updateRequest.put("color", producto.getColor());
+            updateRequest.put("categoryId", producto.getCategory().getId());
+            updateRequest.put("stock", nuevoStock);
+            updateRequest.put("price", producto.getPrice());
+            updateRequest.put("active", producto.getActive());
+            updateRequest.put("imageIds", new java.util.ArrayList<>());
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.setContentType(org.springframework.http.MediaType.APPLICATION_JSON);
+
+            org.springframework.http.HttpEntity<java.util.Map<String, Object>> entity =
+                    new org.springframework.http.HttpEntity<>(updateRequest, headers);
+
+            org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+            org.springframework.http.ResponseEntity<String> response = restTemplate.exchange(
+                    url,
+                    org.springframework.http.HttpMethod.PUT,
+                    entity,
+                    String.class
+            );
+
+            return response.getStatusCode().is2xxSuccessful();
+        } catch (Exception e) {
+            logger.error("Error actualizando stock directamente: {}", e.getMessage());
+            return false;
+        }
+    }
+
+    // Método para notificar cancelación automática
+    private void notificarCancelacionAutomatica(FacturaEntity factura) {
+        try {
+            UserResponse user = userClient.getUserById(factura.getUserId());
+
+            // Usar el método que agregaste al NotifyClientService
+            notifyClientService.sendOrderCancellation(
+                    user.getEmail(),
+                    factura.getCodFactura(),
+                    "Su pedido ha sido cancelado automáticamente por falta de pago dentro de " + EXPIRATION_MINUTES + " minutos."
+            );
+
+            logger.info("Notificación de cancelación enviada a {} para factura {}",
+                    user.getEmail(), factura.getCodFactura());
+
+        } catch (Exception e) {
+            logger.error("Error notificando cancelación automática para factura {}: {}",
+                    factura.getCodFactura(), e.getMessage());
+        }
+    }
+
+    // Método público simplificado para ser llamado por scheduler
+    @Transactional
+    public void verificarFacturasExpiradas() {
+        procesarFacturasVencidas();
     }
 }

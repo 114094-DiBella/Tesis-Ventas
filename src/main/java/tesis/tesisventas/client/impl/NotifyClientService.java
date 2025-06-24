@@ -77,4 +77,31 @@ public class NotifyClientService {
             logger.error("❌ Error enviando notificación de pago para orden {}: {}", orderCode, e.getMessage());
         }
     }
+
+    // Agregar este método a tu NotifyClientService
+
+    public void sendOrderCancellation(String email, String orderCode, String reason) {
+        try {
+            String url = NOTIFY_SERVICE_URL + "/api/notifications/order-cancellation";
+
+            UriComponentsBuilder builder = UriComponentsBuilder.fromUriString(url)
+                    .queryParam("email", email)
+                    .queryParam("orderCode", orderCode)
+                    .queryParam("reason", reason);
+
+            ResponseEntity<Map> response = restTemplate.postForEntity(
+                    builder.toUriString(),
+                    null,
+                    Map.class
+            );
+
+            if (response.getStatusCode().is2xxSuccessful()) {
+                logger.info("✅ Notificación de cancelación enviada - Orden: {} a: {}", orderCode, email);
+            } else {
+                logger.error("❌ Error enviando notificación de cancelación. Status: {}", response.getStatusCode());
+            }
+        } catch (Exception e) {
+            logger.error("❌ Error enviando notificación de cancelación para orden {}: {}", orderCode, e.getMessage());
+        }
+    }
 }
